@@ -3,8 +3,9 @@ import { AgentRole, AgentState } from '../types/office.js';
 export interface AgentStateChangedPayload {
   agentId: string;
   role: AgentRole;
-  from: AgentState;
-  to: AgentState;
+  from?: AgentState;
+  to?: AgentState;
+  action?: 'HIRED' | 'RELEASED';
   reason?: string;
   targetZone?: string;
 }
