@@ -34,7 +34,10 @@ export class DevTools {
     fs.writeFileSync(target, content, 'utf-8');
   }
 
-  public listFiles(relDir: string = ''): string[] {
+  public listFiles(
+    relDir: string = '',
+    ignoredFolders: string[] = ['node_modules', '.git', 'dist', '.cache']
+  ): string[] {
     const target = this.resolvePath(relDir);
     if (!fs.existsSync(target)) {
       return [];
@@ -43,17 +46,36 @@ export class DevTools {
     if (!stat.isDirectory()) {
       return [path.relative(this.rootDir, target).split(path.sep).join('/')];
     }
-    const entries = fs.readdirSync(target, { recursive: true });
-    return entries
-      .map((entry) => entry.toString())
-      .filter((entryPath) => {
-        try {
-          return fs.statSync(path.join(target, entryPath)).isFile();
-        } catch {
-          return false;
+
+    const ignoredSet = new Set(ignoredFolders);
+    const results: string[] = [];
+
+    const walk = (currentDir: string) => {
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(currentDir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+
+      for (const entry of entries) {
+        if (ignoredSet.has(entry.name)) {
+          continue;
         }
-      })
-      .map((entryPath) => entryPath.split(path.sep).join('/'));
+
+        const fullPath = path.join(currentDir, entry.name);
+
+        if (entry.isDirectory()) {
+          walk(fullPath);
+        } else if (entry.isFile()) {
+          const relToRoot = path.relative(this.rootDir, fullPath).split(path.sep).join('/');
+          results.push(relToRoot);
+        }
+      }
+    };
+
+    walk(target);
+    return results;
   }
 
   public runCommand(cmd: string): { stdout: string; error?: string } {
@@ -77,8 +99,19 @@ export class DevTools {
   }
 
   public getGitDiff(target?: string): string {
+    const gitPath = path.join(this.rootDir, '.git');
+    if (!fs.existsSync(gitPath)) {
+      return '';
+    }
     try {
-      const args = target ? ['diff', target] : ['diff'];
+      const args = [
+        '--git-dir',
+        gitPath,
+        '--work-tree',
+        this.rootDir,
+        'diff',
+        ...(target ? [target] : [])
+      ];
       const output = execFileSync('git', args, {
         cwd: this.rootDir,
         timeout: 15000,

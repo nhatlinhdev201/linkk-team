@@ -25,12 +25,14 @@ const MODEL_PRICING: Record<string, { promptPer1k: number; completionPer1k: numb
 
 const DEFAULT_PRICING = { promptPer1k: 0.003, completionPer1k: 0.015 };
 
+const SORTED_PRICING_KEYS = Object.keys(MODEL_PRICING).sort((a, b) => b.length - a.length);
+
 function getPricing(modelName?: string): { promptPer1k: number; completionPer1k: number } {
   if (!modelName) return DEFAULT_PRICING;
   const lower = modelName.toLowerCase();
-  for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
+  for (const key of SORTED_PRICING_KEYS) {
     if (lower.includes(key)) {
-      return pricing;
+      return MODEL_PRICING[key];
     }
   }
   return DEFAULT_PRICING;
@@ -67,26 +69,27 @@ export class ModelProviderHub {
         model: targetModel,
         messages,
         temperature: 0.2
-      })
+      }),
+      signal: AbortSignal.timeout(60000)
     });
 
     if (!res.ok) {
       let errorDetail = res.statusText || 'Unknown error';
-      try {
-        const errorBody = await res.json();
-        if (errorBody?.error?.message) {
-          errorDetail = errorBody.error.message;
-        } else if (errorBody?.message) {
-          errorDetail = errorBody.message;
-        } else if (typeof errorBody === 'string') {
-          errorDetail = errorBody;
-        }
-      } catch {
+      const raw = await res.text().catch(() => '');
+      if (raw) {
         try {
-          const text = await res.text();
-          if (text) errorDetail = text;
+          const errorBody = JSON.parse(raw);
+          if (errorBody?.error?.message) {
+            errorDetail = errorBody.error.message;
+          } else if (errorBody?.message) {
+            errorDetail = errorBody.message;
+          } else if (typeof errorBody === 'string') {
+            errorDetail = errorBody;
+          } else {
+            errorDetail = raw;
+          }
         } catch {
-          // ignore error reading text
+          errorDetail = raw;
         }
       }
       throw new Error(`Proxy error (${res.status}): ${errorDetail}`);

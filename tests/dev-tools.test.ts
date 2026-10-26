@@ -75,7 +75,7 @@ describe('DevTools Engine', () => {
   });
 
   describe('listFiles', () => {
-    it('should list all files recursively relative to root', () => {
+    it('should list all files recursively relative to root and allow direct readFile', () => {
       const tools = new DevTools(testRoot);
       tools.writeFile('index.ts', 'console.log("root");');
       tools.writeFile('src/app.ts', 'export default {};');
@@ -87,19 +87,49 @@ describe('DevTools Engine', () => {
         'src/app.ts',
         'src/utils/helpers.ts'
       ].sort());
+
+      // Each returned path is relative to rootDir and can be read directly
+      for (const f of files) {
+        expect(tools.readFile(f)).toBeDefined();
+      }
     });
 
-    it('should list files within a specific subfolder', () => {
+    it('should list files within a specific subfolder returning paths relative to rootDir', () => {
       const tools = new DevTools(testRoot);
       tools.writeFile('root.txt', 'root');
-      tools.writeFile('nested/a.txt', 'a');
-      tools.writeFile('nested/sub/b.txt', 'b');
+      tools.writeFile('nested/a.txt', 'a content');
+      tools.writeFile('nested/sub/b.txt', 'b content');
 
       const files = tools.listFiles('nested');
       expect(files.sort()).toEqual([
-        'a.txt',
-        'sub/b.txt'
+        'nested/a.txt',
+        'nested/sub/b.txt'
       ].sort());
+
+      // Directly readable
+      expect(tools.readFile(files[0])).toBe('a content');
+    });
+
+    it('should skip default ignored folders like node_modules, .git, dist, and .cache', () => {
+      const tools = new DevTools(testRoot);
+      tools.writeFile('src/index.ts', 'export const ok = 1;');
+      tools.writeFile('node_modules/pkg/index.js', 'module.exports = {};');
+      tools.writeFile('.git/objects/abc', 'fake-git-object');
+      tools.writeFile('dist/bundle.js', 'console.log("bundle");');
+      tools.writeFile('.cache/temp.data', 'cached');
+
+      const files = tools.listFiles();
+      expect(files).toEqual(['src/index.ts']);
+    });
+
+    it('should allow custom ignoredFolders to be provided', () => {
+      const tools = new DevTools(testRoot);
+      tools.writeFile('src/index.ts', 'export const ok = 1;');
+      tools.writeFile('build/output.js', 'output');
+      tools.writeFile('temp/temp.txt', 'temp');
+
+      const files = tools.listFiles('', ['build', 'temp']);
+      expect(files).toEqual(['src/index.ts']);
     });
 
     it('should return empty array if directory does not exist', () => {
@@ -178,7 +208,7 @@ describe('ModelProviderHub', () => {
     vi.restoreAllMocks();
   });
 
-  it('should call chat completions endpoint and return CompletionResult with tokens and cost', async () => {
+  it('should call chat completions endpoint with AbortSignal timeout and return CompletionResult', async () => {
     const hub = new ModelProviderHub(dummyConfig);
     const messages: ChatMessage[] = [
       { role: 'system', content: 'You are an architect.' },
@@ -202,11 +232,13 @@ describe('ModelProviderHub', () => {
       model: 'claude-3-5-sonnet'
     };
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => mockResponseData
-    } as any);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(mockResponseData), {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
 
     const result = await hub.callChatCompletion(messages, 'ARCHITECT');
 
@@ -217,6 +249,7 @@ describe('ModelProviderHub', () => {
       'Content-Type': 'application/json',
       Authorization: 'Bearer sk-test-proxy-key'
     });
+    expect(calledOptions?.signal).toBeInstanceOf(AbortSignal);
 
     const parsedBody = JSON.parse(calledOptions?.body as string);
     expect(parsedBody.model).toBe('claude-3-5-sonnet');
@@ -234,14 +267,15 @@ describe('ModelProviderHub', () => {
     const hub = new ModelProviderHub(dummyConfig);
     const messages: ChatMessage[] = [{ role: 'user', content: 'Run test suite' }];
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        choices: [{ message: { role: 'assistant', content: 'Tests passed.' } }],
-        usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 }
-      })
-    } as any);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'Tests passed.' } }],
+          usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 }
+        }),
+        { status: 200, statusText: 'OK', headers: { 'Content-Type': 'application/json' } }
+      )
+    );
 
     const result = await hub.callChatCompletion(messages, 'QA');
     const calledOptions = fetchSpy.mock.calls[0][1];
@@ -255,14 +289,15 @@ describe('ModelProviderHub', () => {
     const hub = new ModelProviderHub(dummyConfig);
     const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }];
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        choices: [{ message: { role: 'assistant', content: 'Custom response' } }],
-        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }
-      })
-    } as any);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'Custom response' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }
+        }),
+        { status: 200, statusText: 'OK', headers: { 'Content-Type': 'application/json' } }
+      )
+    );
 
     await hub.callChatCompletion(messages, 'QA', 'deepseek-coder');
     const calledOptions = fetchSpy.mock.calls[0][1];
@@ -271,33 +306,34 @@ describe('ModelProviderHub', () => {
     expect(parsedBody.model).toBe('deepseek-coder');
   });
 
-  it('should throw descriptive error when proxy returns HTTP 500', async () => {
+  it('should throw descriptive error when proxy returns HTTP 500 with JSON body', async () => {
     const hub = new ModelProviderHub(dummyConfig);
     const messages: ChatMessage[] = [{ role: 'user', content: 'Trigger error' }];
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
-      json: async () => ({ error: { message: 'Provider rate limit exceeded' } })
-    } as any);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ error: { message: 'Provider rate limit exceeded' } }),
+        { status: 500, statusText: 'Internal Server Error', headers: { 'Content-Type': 'application/json' } }
+      )
+    );
 
     await expect(hub.callChatCompletion(messages)).rejects.toThrowError(
       /Proxy error.*500.*Provider rate limit exceeded/
     );
   });
 
-  it('should throw descriptive error when proxy returns HTTP error with plain text', async () => {
+  it('should throw descriptive error when proxy returns HTTP error with plain text without stream errors', async () => {
     const hub = new ModelProviderHub(dummyConfig);
     const messages: ChatMessage[] = [{ role: 'user', content: 'Trigger 401' }];
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      statusText: 'Unauthorized',
-      json: async () => { throw new Error('Not JSON'); },
-      text: async () => 'Invalid API key provided'
-    } as any);
+    // Real Response instance with text/plain body
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('Invalid API key provided', {
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    );
 
     await expect(hub.callChatCompletion(messages)).rejects.toThrowError(
       /Proxy error.*401.*Invalid API key provided/
@@ -316,6 +352,14 @@ describe('ModelProviderHub', () => {
       const hub = new ModelProviderHub(dummyConfig);
       // 1000 prompt @ 0.00015/1k = 0.00015, 1000 completion @ 0.0006/1k = 0.0006 -> 0.00075
       const cost = hub.calculateCost(1000, 1000, 'gpt-4o-mini');
+      expect(cost).toBeCloseTo(0.00075, 5);
+    });
+
+    it('should prioritize longer model prefix match (gpt-4o-mini over gpt-4o)', () => {
+      const hub = new ModelProviderHub(dummyConfig);
+      // gpt-4o-mini-2024-07-18 contains both "gpt-4o" and "gpt-4o-mini".
+      // It must match "gpt-4o-mini" (0.00075) rather than "gpt-4o" (0.0125).
+      const cost = hub.calculateCost(1000, 1000, 'gpt-4o-mini-2024-07-18');
       expect(cost).toBeCloseTo(0.00075, 5);
     });
 

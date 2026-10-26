@@ -1,5 +1,6 @@
 node_modules/
 dist/
 .test-office/
+.test-*
 *.log
 .DS_Store
