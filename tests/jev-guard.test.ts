@@ -279,6 +279,17 @@ describe('JevGuard - Thought Summarizer (summarizeThought)', () => {
     expect(summary3).not.toBe('Đang viết mã nguồn...');
     expect(summary3.split(/\s+/).length).toBeLessThanOrEqual(8);
   });
+
+  it('correctly matches accented Vietnamese thoughts without word boundary breakage', () => {
+    const guard = new JevGuard();
+    expect(guard.summarizeThought('Tôi đang kiểm thử hàm login')).toBe('Đang chạy kiểm thử...');
+    expect(guard.summarizeThought('Đang viết mã cho module auth')).toBe('Đang viết mã nguồn...');
+    expect(guard.summarizeThought('Đang phân tích cấu trúc hệ thống')).toBe('Đang phân tích cấu trúc...');
+    expect(guard.summarizeThought('Lên kế hoạch phát triển sprint mới')).toBe('Đang lập kế hoạch...');
+    expect(guard.summarizeThought('Đang triển khai môi trường staging')).toBe('Đang triển khai môi trường...');
+    expect(guard.summarizeThought('Đang gỡ lỗi sự cố kết nối')).toBe('Đang gỡ lỗi sự cố...');
+    expect(guard.summarizeThought('Cập nhật cơ sở dữ liệu khách hàng')).toBe('Đang xử lý cơ sở dữ liệu...');
+  });
 });
 
 describe('JevGuard - Squad Recommender (recommendSquad)', () => {

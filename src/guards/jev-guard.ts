@@ -84,37 +84,37 @@ export class JevGuard {
     const lower = cleaned.toLowerCase();
 
     // Priority 1: AST Analysis & Review
-    if (/\b(analyz\w*|analysis|ast|inspect\w*|review\w*|phân tích)\b/i.test(lower)) {
+    if (/(?:\b(analyz\w*|analysis|ast|inspect\w*|review\w*)\b|phân tích)/i.test(lower)) {
       return 'Đang phân tích cấu trúc...';
     }
 
     // Priority 2: Testing & Verification
-    if (/\b(tests?|testing|vitest|jest|pytest|kiểm thử)\b/i.test(lower)) {
+    if (/(?:\b(tests?|testing|vitest|jest|pytest)\b|kiểm thử)/i.test(lower)) {
       return 'Đang chạy kiểm thử...';
     }
 
     // Priority 3: Planning & System Architecture
-    if (/\b(plans?|planning|architect\w*|roadmap|designs?|kế hoạch)\b/i.test(lower)) {
+    if (/(?:\b(plans?|planning|architect\w*|roadmap|designs?)\b|kế hoạch)/i.test(lower)) {
       return 'Đang lập kế hoạch...';
     }
 
     // Priority 4: Deployment & DevOps Infrastructure
-    if (/\b(deploys?|deploying|deployment|docker|ci\/cd|ci-cd|\bci\b|\bcd\b|kubernetes|k8s|triển khai)\b/i.test(lower)) {
+    if (/(?:\b(deploys?|deploying|deployment|docker|ci\/cd|ci-cd|\bci\b|\bcd\b|kubernetes|k8s)\b|triển khai)/i.test(lower)) {
       return 'Đang triển khai môi trường...';
     }
 
     // Priority 5: Debugging & Fixing Errors
-    if (/\b(debug\w*|errors?|bugs?|issues?|fix\w*|gỡ lỗi)\b/i.test(lower)) {
+    if (/(?:\b(debug\w*|errors?|bugs?|issues?|fix\w*)\b|gỡ lỗi)/i.test(lower)) {
       return 'Đang gỡ lỗi sự cố...';
     }
 
     // Priority 6: Code Writing & Editing
-    if (/\b(edits?|editing|writing|code|coding|implement\w*|viết mã)\b/i.test(lower)) {
+    if (/(?:\b(edits?|editing|writing|code|coding|implement\w*)\b|viết mã)/i.test(lower)) {
       return 'Đang viết mã nguồn...';
     }
 
     // Priority 7: Database Operations
-    if (/\b(databases?|schemas?|query|queries|sql|csdl)\b/i.test(lower)) {
+    if (/(?:\b(databases?|schemas?|query|queries|sql|csdl)\b|cơ sở dữ liệu)/i.test(lower)) {
       return 'Đang xử lý cơ sở dữ liệu...';
     }
 
