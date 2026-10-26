@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { OfficeStorage } from '../src/storage/office-storage.js';
+import { OfficeStorage, toTask, toEpic } from '../src/storage/office-storage.js';
+import { parseTaskListMarkdown } from '../src/storage/markdown-sync.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -23,11 +24,21 @@ describe('OfficeStorage', () => {
     }
   });
 
-  it('should initialize database in WAL mode', () => {
+  it('should initialize database in WAL mode and foreign keys enabled', () => {
     storage = new OfficeStorage(testDir);
     const db = storage.getDatabase();
     const journalMode = db.pragma('journal_mode', { simple: true });
     expect(journalMode).toBe('wal');
+
+    const foreignKeys = db.pragma('foreign_keys', { simple: true });
+    expect(foreignKeys).toBe(1);
+  });
+
+  it('should enforce foreign key constraint when inserting tasks for nonexistent epics', () => {
+    storage = new OfficeStorage(testDir);
+    expect(() => {
+      storage.createTask('TASK-ORPHAN', 'NON_EXISTENT_EPIC', 'Orphan Task');
+    }).toThrow(/FOREIGN KEY constraint failed/);
   });
 
   it('should create an epic, retrieve it, and update its status', () => {
@@ -97,22 +108,21 @@ describe('OfficeStorage', () => {
     expect(mdContent).toContain('- [ ] TASK-2: Login UI form (BACKLOG)');
   });
 
-  it('should log activity events and retrieve them with parsed payload', () => {
+  it('should safely log activity events including undefined payload', () => {
     storage = new OfficeStorage(testDir);
     storage.createEpic('EPIC-001', 'Auth Feature', 'JWT implementation');
 
     storage.logActivity('EPIC-001', 'agent-coder-1', 'TOOL_CALL', { tool: 'readFile', file: 'auth.ts' });
     storage.logActivity('EPIC-001', 'agent-coder-1', 'FILE_EDIT', { file: 'auth.ts', linesChanged: 15 });
-    storage.logActivity('EPIC-002', 'agent-architect-1', 'PLAN_CREATED', { tasksCount: 3 });
+    storage.logActivity('EPIC-001', 'agent-devops-1', 'PING', undefined);
 
     const epic1Logs = storage.getActivityLogs('EPIC-001');
-    expect(epic1Logs.length).toBe(2);
+    expect(epic1Logs.length).toBe(3);
     expect(epic1Logs[0].eventType).toBe('TOOL_CALL');
     expect(epic1Logs[0].payload).toEqual({ tool: 'readFile', file: 'auth.ts' });
     expect(epic1Logs[1].eventType).toBe('FILE_EDIT');
-
-    const allLogs = storage.getActivityLogs();
-    expect(allLogs.length).toBe(3);
+    expect(epic1Logs[2].eventType).toBe('PING');
+    expect(epic1Logs[2].payload).toEqual({});
   });
 
   it('should record quota and track accumulated cost per epic', () => {
@@ -153,5 +163,84 @@ describe('OfficeStorage', () => {
     const md = fs.readFileSync(mdPath, 'utf-8');
     expect(md).toContain('TASK-S1: Manual Task (BACKLOG)');
   });
-});
 
+  it('should not pollute filesystem when running in in-memory mode', () => {
+    const memStorage = new OfficeStorage(':memory:');
+    memStorage.createEpic('EPIC-MEM', 'Memory Epic', 'No files on disk');
+    memStorage.createTask('TASK-MEM', 'EPIC-MEM', 'Memory task', 'BACKEND');
+    memStorage.moveTask('TASK-MEM', 'DONE');
+    memStorage.syncMarkdown('EPIC-MEM');
+
+    const unintendedDir = path.join(process.cwd(), 'epics', 'EPIC-MEM');
+    expect(fs.existsSync(unintendedDir)).toBe(false);
+    memStorage.close();
+  });
+
+  it('should support canonical type converters and entity getters', () => {
+    storage = new OfficeStorage(testDir);
+    storage.createEpic('EPIC-TYPE', 'Typing Epic', 'Testing canonical types', 15.0);
+    storage.createTask('TASK-T1', 'EPIC-TYPE', 'Type Task 1', 'FRONTEND');
+
+    const epicRecord = storage.getEpic('EPIC-TYPE')!;
+    const canonicalEpic = toEpic(epicRecord);
+    expect(canonicalEpic.id).toBe('EPIC-TYPE');
+    expect(canonicalEpic.budgetCapUsd).toBe(15.0);
+
+    const entityEpic = storage.getEpicEntity('EPIC-TYPE');
+    expect(entityEpic?.budgetCapUsd).toBe(15.0);
+
+    const taskRecord = storage.getTask('TASK-T1')!;
+    const canonicalTask = toTask(taskRecord);
+    expect(canonicalTask.epicId).toBe('EPIC-TYPE');
+    expect(canonicalTask.assignedAgentId).toBe('FRONTEND');
+
+    const entityTask = storage.getTaskEntity('TASK-T1');
+    expect(entityTask?.epicId).toBe('EPIC-TYPE');
+
+    const entityTasks = storage.getTasksEntitiesByEpic('EPIC-TYPE');
+    expect(entityTasks.length).toBe(1);
+    expect(entityTasks[0].assignedAgentId).toBe('FRONTEND');
+  });
+
+  it('should parse markdown task list correctly including titles with parentheses', () => {
+    const md = `
+# Tasks for EPIC-001
+
+- [ ] TASK-1: Setup auth (JWT token) (IN_PROGRESS)
+- [x] TASK-2: Write auth tests (DONE)
+- [x] TASK-3: Documentation without explicit status
+- [ ] TASK-4: Refactor handlers (Backend)
+`;
+
+    const parsed = parseTaskListMarkdown(md);
+    expect(parsed.length).toBe(4);
+
+    expect(parsed[0]).toEqual({
+      id: 'TASK-1',
+      title: 'Setup auth (JWT token)',
+      status: 'IN_PROGRESS',
+      done: false
+    });
+
+    expect(parsed[1]).toEqual({
+      id: 'TASK-2',
+      title: 'Write auth tests',
+      status: 'DONE',
+      done: true
+    });
+
+    expect(parsed[2]).toEqual({
+      id: 'TASK-3',
+      title: 'Documentation without explicit status',
+      status: 'DONE',
+      done: true
+    });
+
+    expect(parsed[3]).toEqual({
+      id: 'TASK-4',
+      title: 'Refactor handlers (Backend)',
+      status: 'BACKLOG',
+      done: false
+    });
+  });
+});

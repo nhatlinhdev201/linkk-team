@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { TaskRecord } from './db.js';
 
 export function formatTaskListMarkdown(epicId: string, tasks: TaskRecord[]): string {
-  const lines = [`# Tasks for ${epicId}\n`];
+  const lines = [`# Tasks for ${epicId}`, ''];
   for (const t of tasks) {
     const check = t.status === 'DONE' ? 'x' : ' ';
     lines.push(`- [${check}] ${t.id}: ${t.title} (${t.status})`);
@@ -25,7 +25,7 @@ export function syncTasksToMarkdown(baseDir: string, epicId: string, tasks: Task
 export function parseTaskListMarkdown(markdown: string): Array<{ id: string; title: string; status: string; done: boolean }> {
   const results: Array<{ id: string; title: string; status: string; done: boolean }> = [];
   const lines = markdown.split('\n');
-  const taskRegex = /^- \[([ xX])\]\s+([A-Za-z0-9_-]+):\s*(.*?)(?:\s+\(([^)]+)\))?$/;
+  const taskRegex = /^- \[([ xX])\]\s+([A-Za-z0-9_-]+):\s*(.*?)(?:\s+\((BACKLOG|TODO|IN_PROGRESS|IN_REVIEW|DONE)\))?$/;
 
   for (const line of lines) {
     const match = line.trim().match(taskRegex);

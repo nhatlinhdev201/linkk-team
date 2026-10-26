@@ -3,9 +3,39 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { initDatabase, type EpicRecord, type TaskRecord, type ActivityLogRecord, type QuotaRecord } from './db.js';
 import { syncTasksToMarkdown } from './markdown-sync.js';
-import type { OfficeConfig, Epic, Task } from '../types/office.js';
+import type { OfficeConfig, Epic, Task, ActivityEvent, EpicStatus, TaskStatus } from '../types/office.js';
 
 export { EpicRecord, TaskRecord, ActivityLogRecord, QuotaRecord };
+
+export interface ActivityLogEntry extends ActivityEvent {
+  id: number;
+  timestamp: string;
+  epic_id: string;
+  agent_id: string;
+  event_type: string;
+  payload_json: string;
+}
+
+export function toTask(record: TaskRecord): Task {
+  return {
+    id: record.id,
+    epicId: record.epic_id,
+    title: record.title,
+    status: record.status as TaskStatus,
+    assignedAgentId: record.assigned_agent_id ?? undefined
+  };
+}
+
+export function toEpic(record: EpicRecord): Epic {
+  return {
+    id: record.id,
+    title: record.title,
+    description: record.description,
+    status: record.status as EpicStatus,
+    budgetCapUsd: record.budget_cap_usd,
+    createdAt: record.created_at
+  };
+}
 
 export class OfficeStorage {
   private db: Database.Database;
@@ -17,7 +47,7 @@ export class OfficeStorage {
       this.baseDir = path.dirname(baseDir);
       this.db = db || initDatabase(dbPath);
     } else if (baseDir === ':memory:') {
-      this.baseDir = process.cwd();
+      this.baseDir = ':memory:';
       this.db = db || initDatabase(':memory:');
     } else {
       this.baseDir = baseDir;
@@ -66,6 +96,11 @@ export class OfficeStorage {
     ).get(id) as EpicRecord | undefined;
   }
 
+  public getEpicEntity(id: string): Epic | undefined {
+    const epic = this.getEpic(id);
+    return epic ? toEpic(epic) : undefined;
+  }
+
   public createTask(id: string, epicId: string, title: string, assignedAgentId?: string): TaskRecord {
     const stmt = this.db.prepare(
       'INSERT INTO tasks (id, epic_id, assigned_agent_id, title, status) VALUES (?, ?, ?, ?, ?)'
@@ -99,21 +134,30 @@ export class OfficeStorage {
     ).get(taskId) as TaskRecord | undefined;
   }
 
+  public getTaskEntity(taskId: string): Task | undefined {
+    const task = this.getTask(taskId);
+    return task ? toTask(task) : undefined;
+  }
+
   public getTasksByEpic(epicId: string): TaskRecord[] {
     return this.db.prepare(
       'SELECT id, epic_id, assigned_agent_id, title, status, created_at, completed_at FROM tasks WHERE epic_id = ?'
     ).all(epicId) as TaskRecord[];
   }
 
+  public getTasksEntitiesByEpic(epicId: string): Task[] {
+    return this.getTasksByEpic(epicId).map(toTask);
+  }
+
   public logActivity(epicId: string, agentId: string, eventType: string, payload: any): void {
-    const payloadJson = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    const payloadJson = payload === undefined ? '{}' : (typeof payload === 'string' ? payload : JSON.stringify(payload));
     const stmt = this.db.prepare(
       'INSERT INTO activity_logs (epic_id, agent_id, event_type, payload_json) VALUES (?, ?, ?, ?)'
     );
     stmt.run(epicId, agentId, eventType, payloadJson);
   }
 
-  public getActivityLogs(epicId?: string): any[] {
+  public getActivityLogs(epicId?: string): ActivityLogEntry[] {
     let rows: any[];
     if (epicId) {
       rows = this.db.prepare(
@@ -168,6 +212,9 @@ export class OfficeStorage {
   }
 
   public syncMarkdown(epicId: string): void {
+    if (this.baseDir === ':memory:') {
+      return;
+    }
     const tasks = this.getTasksByEpic(epicId);
     syncTasksToMarkdown(this.baseDir, epicId, tasks);
   }

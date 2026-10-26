@@ -49,6 +49,7 @@ export function initDatabase(dbPath: string): Database.Database {
 
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS epics (
@@ -87,6 +88,10 @@ export function initDatabase(dbPath: string): Database.Database {
       epic_id TEXT NOT NULL,
       cost_usd REAL NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_epic_id ON tasks(epic_id);
+    CREATE INDEX IF NOT EXISTS idx_activity_logs_epic_id ON activity_logs(epic_id);
+    CREATE INDEX IF NOT EXISTS idx_quota_epic_id ON quota_tracking(epic_id);
   `);
 
   return db;
