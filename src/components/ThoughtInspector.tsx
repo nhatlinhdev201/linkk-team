@@ -152,7 +152,10 @@ export const ThoughtInspector: React.FC<ThoughtInspectorProps> = ({
 
           <button
             data-testid="btn-clear-thoughts"
-            onClick={() => setThoughts([])}
+            onClick={() => {
+              setThoughts([]);
+              setSelectedAgent('ALL');
+            }}
             style={{
               backgroundColor: '#334155',
               color: '#cbd5e1',

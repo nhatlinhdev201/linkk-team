@@ -68,6 +68,11 @@ export const DirectorBar: React.FC<DirectorBarProps> = ({
     const reason = 'Emergency War Room Summoned';
     if (squadManager) {
       squadManager.summonWarRoom(reason);
+    } else if (bus) {
+      bus.emit('WAR_ROOM_SUMMONED', {
+        reason,
+        timestamp: new Date().toISOString(),
+      });
     }
     if (onSummonWarRoom) {
       onSummonWarRoom(reason);

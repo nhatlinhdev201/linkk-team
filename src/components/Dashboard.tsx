@@ -18,11 +18,13 @@ export interface DashboardProps {
   className?: string;
 }
 
+const EMPTY_TASKS: Task[] = [];
+
 export const Dashboard: React.FC<DashboardProps> = ({
   bus,
   squadManager,
   configManager,
-  tasks: initialTasks = [],
+  tasks: initialTasks = EMPTY_TASKS,
   onMoveTask,
   className = '',
 }) => {
@@ -67,10 +69,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleMoveTask = (taskId: string, newStatus: TaskStatus) => {
     const targetTask = tasks.find((t) => t.id === taskId);
     const fromStatus = targetTask ? targetTask.status : '';
-
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
-    );
 
     bus.emit('TICKET_MOVED', {
       taskId,

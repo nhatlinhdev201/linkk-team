@@ -228,6 +228,22 @@ describe('Dashboard Component Suite', () => {
       expect(onSummonWarRoom).toHaveBeenCalled();
     });
 
+    it('should emit WAR_ROOM_SUMMONED to bus when squadManager is omitted', () => {
+      const warRoomSpy = vi.fn();
+      bus.subscribe('WAR_ROOM_SUMMONED', warRoomSpy);
+
+      render(React.createElement(DirectorBar, { bus }));
+
+      const summonBtn = screen.getByTestId('btn-summon-war-room');
+      fireEvent.click(summonBtn);
+
+      expect(warRoomSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: 'Emergency War Room Summoned',
+        })
+      );
+    });
+
     it('should hire agent when Hire Agent button is clicked with chosen role', () => {
       const squadManager = new SquadManager(bus);
       const hireSpy = vi.spyOn(squadManager, 'hireAgent');
@@ -394,6 +410,39 @@ describe('Dashboard Component Suite', () => {
       expect(onClose).toHaveBeenCalled();
       expect(onSaveConfig).not.toHaveBeenCalled();
     });
+
+    it('should close when backdrop is clicked', () => {
+      const onClose = vi.fn();
+      render(
+        React.createElement(SettingsModal, {
+          isOpen: true,
+          onClose,
+          config: initialConfig,
+          onSaveConfig: vi.fn(),
+        })
+      );
+
+      const modalBackdrop = screen.getByTestId('settings-modal');
+      fireEvent.click(modalBackdrop);
+
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('should close when Escape key is pressed', () => {
+      const onClose = vi.fn();
+      render(
+        React.createElement(SettingsModal, {
+          isOpen: true,
+          onClose,
+          config: initialConfig,
+          onSaveConfig: vi.fn(),
+        })
+      );
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 
   describe('ThoughtInspector', () => {
@@ -452,6 +501,27 @@ describe('Dashboard Component Suite', () => {
 
       expect(screen.getByText('Refactoring database models')).toBeDefined();
       expect(screen.queryByText('Styling dashboard components')).toBeNull();
+    });
+
+    it('should reset filter to ALL when Clear button is clicked', () => {
+      render(React.createElement(ThoughtInspector, { bus }));
+
+      act(() => {
+        bus.emit('BUBBLE_SPEECH', {
+          agentId: 'agent-be',
+          text: 'Querying database',
+        });
+      });
+
+      const filterSelect = screen.getByTestId('select-agent-filter') as HTMLSelectElement;
+      fireEvent.change(filterSelect, { target: { value: 'agent-be' } });
+      expect(filterSelect.value).toBe('agent-be');
+
+      const clearBtn = screen.getByTestId('btn-clear-thoughts');
+      fireEvent.click(clearBtn);
+
+      expect(filterSelect.value).toBe('ALL');
+      expect(screen.queryByText('Querying database')).toBeNull();
     });
 
     it('should clean up subscriptions when unmounted', () => {
@@ -551,6 +621,22 @@ describe('Dashboard Component Suite', () => {
           toStatus: 'IN_PROGRESS',
         })
       );
+    });
+
+    it('should dynamically update budget and spend display when QUOTA_WARNING is emitted on bus', () => {
+      render(React.createElement(Dashboard, { bus }));
+
+      expect(screen.getByTestId('budget-display').textContent).toContain('$0.00');
+
+      act(() => {
+        bus.emit('QUOTA_WARNING', {
+          epicId: 'EPIC-1',
+          currentSpendUsd: 4.25,
+          budgetCapUsd: 5.0,
+        });
+      });
+
+      expect(screen.getByTestId('budget-display').textContent).toContain('$4.25');
     });
   });
 });
