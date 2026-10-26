@@ -64,3 +64,5 @@ export const OfficeCanvas: React.FC<OfficeCanvasProps> = ({
     />
   );
 };
+
+export const OfficeCanvasComponent = OfficeCanvas;

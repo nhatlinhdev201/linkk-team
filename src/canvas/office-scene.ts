@@ -34,6 +34,8 @@ export class OfficeScene extends Phaser.Scene {
 
   private bus: OfficeEventBus;
   private agentSprites: Map<string, Phaser.GameObjects.Container> = new Map();
+  private agentRoles: Map<string, AgentRole> = new Map();
+  private departingSprites: Set<Phaser.GameObjects.Container> = new Set();
   private speechBubbles: Map<string, Phaser.GameObjects.Container | Phaser.GameObjects.GameObject> = new Map();
   private speechBubbleTimers: Map<string, { remove: () => void }> = new Map();
   private unsubscribers: Array<() => void> = [];
@@ -41,17 +43,6 @@ export class OfficeScene extends Phaser.Scene {
   constructor(bus: OfficeEventBus) {
     super({ key: 'OfficeScene' });
     this.bus = bus;
-    this.setupSpritesMap();
-  }
-
-  private setupSpritesMap(): void {
-    // Add length accessor for convenience in tests and callers
-    if (!Object.prototype.hasOwnProperty.call(this.agentSprites, 'length')) {
-      Object.defineProperty(this.agentSprites, 'length', {
-        get: () => this.agentSprites.size,
-        configurable: true,
-      });
-    }
   }
 
   public create(): void {
@@ -60,25 +51,25 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private renderOfficeLayout(): void {
-    // 1. Entrance & Elevator (100, 300)
+    // 1. Entrance & Elevator (100, 300, 140x100) -> label at top: 300 - 50 + 16 = 266
     this.add.rectangle(100, 300, 140, 100, 0x334155).setOrigin(0.5);
-    this.add.text(100, 300, 'Thang Máy', { fontSize: '13px', color: '#94a3b8' }).setOrigin(0.5);
+    this.add.text(100, 266, 'Thang Máy', { fontSize: '13px', color: '#94a3b8' }).setOrigin(0.5);
 
-    // 2. Workstations (400, 200)
+    // 2. Workstations (400, 200, 320x160) -> label at top: 200 - 80 + 16 = 136
     this.add.rectangle(400, 200, 320, 160, 0x1e293b).setOrigin(0.5);
-    this.add.text(400, 200, 'Bàn Làm Việc', { fontSize: '14px', color: '#38bdf8' }).setOrigin(0.5);
+    this.add.text(400, 136, 'Bàn Làm Việc', { fontSize: '14px', color: '#38bdf8' }).setOrigin(0.5);
 
-    // 3. War Room (400, 450)
+    // 3. War Room (400, 450, 240x140) -> label at top: 450 - 70 + 16 = 396
     this.add.rectangle(400, 450, 240, 140, 0x0f172a).setOrigin(0.5);
-    this.add.text(400, 450, 'Phòng Họp Khẩn', { fontSize: '13px', color: '#f59e0b' }).setOrigin(0.5);
+    this.add.text(400, 396, 'Phòng Họp Khẩn', { fontSize: '13px', color: '#f59e0b' }).setOrigin(0.5);
 
-    // 4. Coffee Lounge (700, 450)
+    // 4. Coffee Lounge (700, 450, 200x140) -> label at top: 450 - 70 + 16 = 396
     this.add.rectangle(700, 450, 200, 140, 0x1e293b).setOrigin(0.5);
-    this.add.text(700, 450, 'Khu Cà Phê', { fontSize: '13px', color: '#10b981' }).setOrigin(0.5);
+    this.add.text(700, 396, 'Khu Cà Phê', { fontSize: '13px', color: '#10b981' }).setOrigin(0.5);
 
-    // 5. Director Office (700, 200)
+    // 5. Director Office (700, 200, 200x160) -> label at top: 200 - 80 + 16 = 136
     this.add.rectangle(700, 200, 200, 160, 0x312e81).setOrigin(0.5);
-    this.add.text(700, 200, 'Phòng Giám Đốc', { fontSize: '13px', color: '#c084fc' }).setOrigin(0.5);
+    this.add.text(700, 136, 'Phòng Giám Đốc', { fontSize: '13px', color: '#c084fc' }).setOrigin(0.5);
   }
 
   private subscribeToEvents(): void {
@@ -98,9 +89,13 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private getOrCreateAgentSprite(agentId: string, role?: AgentRole): Phaser.GameObjects.Container {
+    if (role) {
+      this.agentRoles.set(agentId, role);
+    }
     let sprite = this.agentSprites.get(agentId);
     if (!sprite) {
-      const color = (role && ROLE_COLORS[role]) || 0x38bdf8;
+      const activeRole = role || this.agentRoles.get(agentId);
+      const color = (activeRole && ROLE_COLORS[activeRole]) || 0x38bdf8;
       const entrance = ZONE_COORDINATES.ENTRANCE;
       sprite = this.add.container(entrance.x, entrance.y) as Phaser.GameObjects.Container;
       const rect = this.add.rectangle(0, 0, 24, 24, color).setOrigin(0.5);
@@ -141,19 +136,29 @@ export class OfficeScene extends Phaser.Scene {
   private handleAgentStateChanged(payload: AgentStateChangedPayload): void {
     const { agentId, role, to, action, targetZone } = payload;
 
+    if (role) {
+      this.agentRoles.set(agentId, role);
+    }
+
     if (action === 'RELEASED') {
       const sprite = this.agentSprites.get(agentId);
       if (sprite) {
+        // Promptly deregister from active agent sprites so subsequent events don't target departing sprite
+        this.agentSprites.delete(agentId);
+        this.agentRoles.delete(agentId);
+        this.dismissBubble(agentId);
+        this.departingSprites.add(sprite);
+
         const elevator = ZONE_COORDINATES.ELEVATOR;
+        this.tweens.killTweensOf(sprite);
         this.tweens.add({
           targets: sprite,
           x: elevator.x,
           y: elevator.y,
           duration: 800,
           onComplete: () => {
-            this.dismissBubble(agentId);
             sprite.destroy();
-            this.agentSprites.delete(agentId);
+            this.departingSprites.delete(sprite);
           },
         });
       }
@@ -166,16 +171,18 @@ export class OfficeScene extends Phaser.Scene {
       sprite.y = ZONE_COORDINATES.ENTRANCE.y;
     }
 
+    const effectiveRole = role || this.agentRoles.get(agentId);
     let dest: ZoneCoordinate | null = null;
     if (targetZone) {
       dest = this.resolveZone(targetZone);
     } else if (to) {
-      dest = this.resolveStateZone(to, role);
+      dest = this.resolveStateZone(to, effectiveRole);
     }
 
     if (dest) {
       const jitterX = (Math.random() - 0.5) * 30;
       const jitterY = (Math.random() - 0.5) * 20;
+      this.tweens.killTweensOf(sprite);
       this.tweens.add({
         targets: sprite,
         x: dest.x + jitterX,
@@ -194,6 +201,7 @@ export class OfficeScene extends Phaser.Scene {
       const offsetY = (Math.floor(index / 3) - 1) * 20;
       index++;
 
+      this.tweens.killTweensOf(sprite);
       this.tweens.add({
         targets: sprite,
         x: warRoom.x + offsetX,
@@ -240,6 +248,15 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  public update(): void {
+    for (const [agentId, bubble] of this.speechBubbles.entries()) {
+      const sprite = this.agentSprites.get(agentId);
+      if (sprite && bubble) {
+        (bubble as Phaser.GameObjects.Container).setPosition(sprite.x, sprite.y - 35);
+      }
+    }
+  }
+
   public getAgentSprite(agentId: string): Phaser.GameObjects.Container | undefined {
     return this.agentSprites.get(agentId);
   }
@@ -262,5 +279,11 @@ export class OfficeScene extends Phaser.Scene {
       sprite.destroy();
     }
     this.agentSprites.clear();
+
+    for (const sprite of this.departingSprites) {
+      sprite.destroy();
+    }
+    this.departingSprites.clear();
+    this.agentRoles.clear();
   }
 }

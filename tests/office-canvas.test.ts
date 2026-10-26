@@ -23,6 +23,12 @@ vi.mock('phaser', () => {
       return this;
     }
 
+    setPosition(x: number, y: number) {
+      this.x = x;
+      this.y = y;
+      return this;
+    }
+
     destroy() {
       this.active = false;
       this.destroyed = true;
@@ -78,6 +84,7 @@ vi.mock('phaser', () => {
     };
 
     public tweens = {
+      killTweensOf: vi.fn(),
       add: vi.fn((config: any) => {
         // Apply tween coordinates to targets immediately or onComplete
         const targets = Array.isArray(config.targets) ? config.targets : [config.targets];
@@ -159,7 +166,7 @@ import { render, cleanup, act } from '@testing-library/react';
 import Phaser from 'phaser';
 import { OfficeEventBus } from '../src/events/event-bus.js';
 import { OfficeScene, ZONE_COORDINATES } from '../src/canvas/office-scene.js';
-import { OfficeCanvas } from '../src/canvas/office-canvas.js';
+import { OfficeCanvas, OfficeCanvasComponent } from '../src/canvas/office-canvas.js';
 
 describe('OfficeCanvas & OfficeScene', () => {
   let bus: OfficeEventBus;
@@ -188,24 +195,34 @@ describe('OfficeCanvas & OfficeScene', () => {
   });
 
   describe('OfficeScene Zone Layout & Initialization', () => {
-    it('should initialize scene and render zone labels in Vietnamese', () => {
+    it('should initialize scene and render offset zone labels in Vietnamese', () => {
       const scene = new OfficeScene(bus);
       scene.create();
 
-      // Check that add.text was called for all 5 zones
-      const createdTexts = (scene.add.text as any).mock.calls.map((call: any[]) => call[2]);
+      // Check that add.text was called with offset y positions towards top of rectangles
+      const textCalls = (scene.add.text as any).mock.calls;
+      const createdTexts = textCalls.map((call: any[]) => call[2]);
       expect(createdTexts).toContain('Thang Máy');
       expect(createdTexts).toContain('Bàn Làm Việc');
       expect(createdTexts).toContain('Phòng Họp Khẩn');
       expect(createdTexts).toContain('Khu Cà Phê');
       expect(createdTexts).toContain('Phòng Giám Đốc');
 
+      // Check offset y positions (y - height/2 + 16)
+      const elevatorText = textCalls.find((c: any[]) => c[2] === 'Thang Máy');
+      expect(elevatorText[0]).toBe(100);
+      expect(elevatorText[1]).toBe(266);
+
+      const workstationText = textCalls.find((c: any[]) => c[2] === 'Bàn Làm Việc');
+      expect(workstationText[0]).toBe(400);
+      expect(workstationText[1]).toBe(136);
+
       // Check zone rectangles
-      expect(scene.add.rectangle).toHaveBeenCalledWith(100, 300, expect.any(Number), expect.any(Number), expect.any(Number));
-      expect(scene.add.rectangle).toHaveBeenCalledWith(400, 200, expect.any(Number), expect.any(Number), expect.any(Number));
-      expect(scene.add.rectangle).toHaveBeenCalledWith(400, 450, expect.any(Number), expect.any(Number), expect.any(Number));
-      expect(scene.add.rectangle).toHaveBeenCalledWith(700, 450, expect.any(Number), expect.any(Number), expect.any(Number));
-      expect(scene.add.rectangle).toHaveBeenCalledWith(700, 200, expect.any(Number), expect.any(Number), expect.any(Number));
+      expect(scene.add.rectangle).toHaveBeenCalledWith(100, 300, 140, 100, expect.any(Number));
+      expect(scene.add.rectangle).toHaveBeenCalledWith(400, 200, 320, 160, expect.any(Number));
+      expect(scene.add.rectangle).toHaveBeenCalledWith(400, 450, 240, 140, expect.any(Number));
+      expect(scene.add.rectangle).toHaveBeenCalledWith(700, 450, 200, 140, expect.any(Number));
+      expect(scene.add.rectangle).toHaveBeenCalledWith(700, 200, 200, 160, expect.any(Number));
     });
   });
 
@@ -222,10 +239,10 @@ describe('OfficeCanvas & OfficeScene', () => {
 
       const sprite = scene.getAgentSprite('agent-dev-1');
       expect(sprite).toBeDefined();
-      expect(scene.getAllSprites().has('agent-dev-1') || (scene.getAllSprites() as any)['agent-dev-1']).toBeTruthy();
+      expect(scene.getAllSprites().has('agent-dev-1')).toBe(true);
     });
 
-    it('should animate agent movement towards explicit targetZone', () => {
+    it('should animate agent movement towards explicit targetZone and cancel prior tweens', () => {
       const scene = new OfficeScene(bus);
       scene.create();
 
@@ -244,6 +261,7 @@ describe('OfficeCanvas & OfficeScene', () => {
         targetZone: 'WAR_ROOM',
       });
 
+      expect(scene.tweens.killTweensOf).toHaveBeenCalled();
       expect(scene.tweens.add).toHaveBeenCalledWith(
         expect.objectContaining({
           targets: expect.anything(),
@@ -259,38 +277,31 @@ describe('OfficeCanvas & OfficeScene', () => {
       expect(Math.abs(sprite!.y - 450)).toBeLessThanOrEqual(50);
     });
 
-    it('should derive destination zone from AgentState when targetZone is omitted', () => {
+    it('should derive destination zone from AgentState when targetZone is omitted and persist role', () => {
       const scene = new OfficeScene(bus);
       scene.create();
 
-      // CODING -> Workstations (400, 200)
+      // Hire as ARCHITECT
       bus.emit('AGENT_STATE_CHANGED', {
-        agentId: 'agent-coder',
-        role: 'BACKEND',
+        agentId: 'agent-arch-lead',
+        role: 'ARCHITECT',
+        action: 'HIRED',
+      });
+
+      // Subsequent event without role specified should remember ARCHITECT -> Director Office (700, 200)
+      bus.emit('AGENT_STATE_CHANGED', {
+        agentId: 'agent-arch-lead',
+        role: undefined as any,
         to: 'CODING',
       });
 
-      let sprite = scene.getAgentSprite('agent-coder');
+      const sprite = scene.getAgentSprite('agent-arch-lead');
       expect(sprite).toBeDefined();
-      expect(Math.abs(sprite!.x - 400)).toBeLessThanOrEqual(50);
+      expect(Math.abs(sprite!.x - 700)).toBeLessThanOrEqual(50);
       expect(Math.abs(sprite!.y - 200)).toBeLessThanOrEqual(50);
-
-      // IDLE -> Coffee Lounge (700, 450) or Workstations
-      bus.emit('AGENT_STATE_CHANGED', {
-        agentId: 'agent-coder',
-        role: 'BACKEND',
-        from: 'CODING',
-        to: 'IDLE',
-      });
-
-      sprite = scene.getAgentSprite('agent-coder');
-      const isAtCoffeeOrDesk =
-        (Math.abs(sprite!.x - 700) <= 50 && Math.abs(sprite!.y - 450) <= 50) ||
-        (Math.abs(sprite!.x - 400) <= 50 && Math.abs(sprite!.y - 200) <= 50);
-      expect(isAtCoffeeOrDesk).toBe(true);
     });
 
-    it('should move agent to Elevator and remove sprite when RELEASED', () => {
+    it('should promptly deregister released agents and cancel prior tweens', () => {
       const scene = new OfficeScene(bus);
       scene.create();
 
@@ -308,13 +319,15 @@ describe('OfficeCanvas & OfficeScene', () => {
         action: 'RELEASED',
       });
 
-      // Sprite should be moved towards elevator (100, 300) and cleaned up
+      // Immediately deregistered from active sprites
       expect(scene.getAgentSprite('agent-contractor')).toBeUndefined();
+      expect(scene.getAllSprites().has('agent-contractor')).toBe(false);
+      expect(scene.tweens.killTweensOf).toHaveBeenCalled();
     });
   });
 
   describe('WAR_ROOM_SUMMONED event', () => {
-    it('should move all active squad sprites towards War Room coordinates', () => {
+    it('should cancel prior tweens and move all active squad sprites towards War Room coordinates', () => {
       const scene = new OfficeScene(bus);
       scene.create();
 
@@ -334,6 +347,8 @@ describe('OfficeCanvas & OfficeScene', () => {
         reason: 'Production DB latency alert',
       });
 
+      expect(scene.tweens.killTweensOf).toHaveBeenCalled();
+
       const sprite1 = scene.getAgentSprite('agent-1')!;
       const sprite2 = scene.getAgentSprite('agent-2')!;
 
@@ -345,7 +360,7 @@ describe('OfficeCanvas & OfficeScene', () => {
     });
   });
 
-  describe('BUBBLE_SPEECH event', () => {
+  describe('BUBBLE_SPEECH event & update() synchronization', () => {
     it('should display speech bubble text over agent sprite and auto-dismiss after duration', () => {
       const scene = new OfficeScene(bus);
       scene.create();
@@ -402,15 +417,47 @@ describe('OfficeCanvas & OfficeScene', () => {
       expect(bubbleTexts).toContain('Second thought');
     });
 
-    it('should handle case-insensitive zone aliases and role-based destinations', () => {
+    it('should synchronize speech bubble position in update() when sprite moves', () => {
       const scene = new OfficeScene(bus);
       scene.create();
+
+      bus.emit('AGENT_STATE_CHANGED', {
+        agentId: 'agent-moving-speaker',
+        role: 'FRONTEND',
+        action: 'HIRED',
+      });
+
+      bus.emit('BUBBLE_SPEECH', {
+        agentId: 'agent-moving-speaker',
+        text: 'On my way!',
+        durationMs: 5000,
+      });
+
+      const sprite = scene.getAgentSprite('agent-moving-speaker')!;
+      // Simulate sprite position changed
+      sprite.x = 550;
+      sprite.y = 350;
+
+      scene.update();
+
+      const bubbleContainer = (scene as any).speechBubbles.get('agent-moving-speaker');
+      expect(bubbleContainer.x).toBe(550);
+      expect(bubbleContainer.y).toBe(350 - 35);
+    });
+
+    it('should handle case-insensitive zone aliases and standard Map.size', () => {
+      const scene = new OfficeScene(bus);
+      scene.create();
+
+      expect(scene.getAllSprites().size).toBe(0);
 
       bus.emit('AGENT_STATE_CHANGED', {
         agentId: 'agent-arch',
         role: 'ARCHITECT',
         action: 'HIRED',
       });
+
+      expect(scene.getAllSprites().size).toBe(1);
 
       // lowercase coffee_lounge
       bus.emit('AGENT_STATE_CHANGED', {
@@ -422,33 +469,6 @@ describe('OfficeCanvas & OfficeScene', () => {
       const sprite = scene.getAgentSprite('agent-arch')!;
       expect(Math.abs(sprite.x - 700)).toBeLessThanOrEqual(50);
       expect(Math.abs(sprite.y - 450)).toBeLessThanOrEqual(50);
-
-      // Architect CODING moves to Director Office
-      bus.emit('AGENT_STATE_CHANGED', {
-        agentId: 'agent-arch',
-        role: 'ARCHITECT',
-        to: 'CODING',
-      });
-      expect(Math.abs(sprite.x - 700)).toBeLessThanOrEqual(50);
-      expect(Math.abs(sprite.y - 200)).toBeLessThanOrEqual(50);
-    });
-
-    it('should support getAllSprites size and length accessors', () => {
-      const scene = new OfficeScene(bus);
-      scene.create();
-
-      expect(scene.getAllSprites().size).toBe(0);
-      expect((scene.getAllSprites() as any).length).toBe(0);
-
-      bus.emit('AGENT_STATE_CHANGED', {
-        agentId: 'agent-x',
-        role: 'FRONTEND',
-        action: 'HIRED',
-      });
-
-      expect(scene.getAllSprites().size).toBe(1);
-      expect((scene.getAllSprites() as any).length).toBe(1);
-      expect(scene.getAgentSprite('non-existent')).toBeUndefined();
     });
   });
 
@@ -478,7 +498,12 @@ describe('OfficeCanvas & OfficeScene', () => {
     });
   });
 
-  describe('OfficeCanvas React Component', () => {
+  describe('OfficeCanvas React Component & OfficeCanvasComponent export alias', () => {
+    it('should export OfficeCanvasComponent alias', () => {
+      expect(OfficeCanvasComponent).toBeDefined();
+      expect(OfficeCanvasComponent).toBe(OfficeCanvas);
+    });
+
     it('should mount canvas container and initialize Phaser.Game with OfficeScene', () => {
       const { container } = render(
         React.createElement(OfficeCanvas, {
@@ -499,7 +524,7 @@ describe('OfficeCanvas & OfficeScene', () => {
     });
 
     it('should destroy Phaser.Game instance on unmount', () => {
-      const { unmount } = render(React.createElement(OfficeCanvas, { bus }));
+      const { unmount } = render(React.createElement(OfficeCanvasComponent, { bus }));
       const gameInstance = (Phaser.Game as any).mock.results[0].value;
 
       unmount();
