@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { runInit, runStart, runCli } from '../bin/office.js';
+import { runInit, runStart, runCli, StartResult } from '../bin/office.js';
 
 describe('CLI Interface & Auto-Onboarding', () => {
   const testRoot = path.join(process.cwd(), '.test-cli-playground');
@@ -144,7 +144,7 @@ describe('CLI Interface & Auto-Onboarding', () => {
     });
 
     describe('Genesis Snapshot (baseline.json)', () => {
-      it('should record targetDir name, detectedStack, and timestamp in baseline.json', () => {
+      it('should record targetDir name, relative targetDir, detectedStack, and timestamp in baseline.json', () => {
         const projectDir = path.join(testRoot, 'awesome-app');
         fs.mkdirSync(projectDir, { recursive: true });
         fs.writeFileSync(path.join(projectDir, 'package.json'), '{}');
@@ -157,6 +157,7 @@ describe('CLI Interface & Auto-Onboarding', () => {
 
         const snapshot = JSON.parse(fs.readFileSync(baselinePath, 'utf-8'));
         expect(snapshot.projectName).toBe('awesome-app');
+        expect(snapshot.targetDir).toBe('.');
         expect(snapshot.detectedStack).toEqual(['Node.js / TypeScript / JavaScript']);
         expect(snapshot.timestamp).toBeDefined();
         expect(new Date(snapshot.timestamp).getTime()).not.toBeNaN();
@@ -164,7 +165,7 @@ describe('CLI Interface & Auto-Onboarding', () => {
     });
 
     describe('Gitignore management', () => {
-      it('should create .gitignore if it does not exist with office entries', () => {
+      it('should create .gitignore if it does not exist with office db wildcard and config', () => {
         const projectDir = path.join(testRoot, 'no-gitignore-proj');
         fs.mkdirSync(projectDir, { recursive: true });
 
@@ -173,7 +174,7 @@ describe('CLI Interface & Auto-Onboarding', () => {
         const gitignorePath = path.join(projectDir, '.gitignore');
         expect(fs.existsSync(gitignorePath)).toBe(true);
         const content = fs.readFileSync(gitignorePath, 'utf-8');
-        expect(content).toContain('.office/office.db');
+        expect(content).toContain('.office/office.db*');
         expect(content).toContain('.office/config.json');
       });
 
@@ -188,15 +189,29 @@ describe('CLI Interface & Auto-Onboarding', () => {
         const content = fs.readFileSync(gitignorePath, 'utf-8');
         expect(content).toContain('node_modules');
         expect(content).toContain('.DS_Store');
-        expect(content).toContain('.office/office.db');
+        expect(content).toContain('.office/office.db*');
         expect(content).toContain('.office/config.json');
       });
 
-      it('should not add duplicate entries if .office entries already exist', () => {
+      it('should ensure SQLite WAL and SHM files are ignored if .office/office.db already exists', () => {
+        const projectDir = path.join(testRoot, 'wal-check-proj');
+        fs.mkdirSync(projectDir, { recursive: true });
+        const gitignorePath = path.join(projectDir, '.gitignore');
+        fs.writeFileSync(gitignorePath, 'node_modules\n.office/office.db\n');
+
+        runInit(projectDir);
+
+        const content = fs.readFileSync(gitignorePath, 'utf-8');
+        expect(content).toContain('.office/office.db-wal');
+        expect(content).toContain('.office/office.db-shm');
+        expect(content).toContain('.office/config.json');
+      });
+
+      it('should not add duplicate entries if .office db wildcard already exists', () => {
         const projectDir = path.join(testRoot, 'duplicate-check-proj');
         fs.mkdirSync(projectDir, { recursive: true });
         const gitignorePath = path.join(projectDir, '.gitignore');
-        const initialContent = 'node_modules\n.office/office.db\n.office/config.json\n';
+        const initialContent = 'node_modules\n.office/office.db*\n.office/config.json\n';
         fs.writeFileSync(gitignorePath, initialContent);
 
         runInit(projectDir);
@@ -258,7 +273,7 @@ describe('CLI Interface & Auto-Onboarding', () => {
 
         // .gitignore should not duplicate lines
         const gitignoreContent = fs.readFileSync(path.join(projectDir, '.gitignore'), 'utf-8');
-        const matchesDb = gitignoreContent.match(/\.office\/office\.db/g);
+        const matchesDb = gitignoreContent.match(/\.office\/office\.db\*/g);
         expect(matchesDb?.length).toBe(1);
       });
     });
@@ -277,6 +292,16 @@ describe('CLI Interface & Auto-Onboarding', () => {
       fs.mkdirSync(path.join(projectDir, '.office'), { recursive: true });
 
       await expect(runStart(projectDir)).rejects.toThrowError(/office init/i);
+    });
+
+    it('should throw error on invalid port in runStart', async () => {
+      const projectDir = path.join(testRoot, 'invalid-port-proj');
+      fs.mkdirSync(projectDir, { recursive: true });
+      runInit(projectDir);
+
+      await expect(runStart(projectDir, { port: -1 })).rejects.toThrowError(/Invalid port/i);
+      await expect(runStart(projectDir, { port: 70000 })).rejects.toThrowError(/Invalid port/i);
+      await expect(runStart(projectDir, { port: NaN })).rejects.toThrowError(/Invalid port/i);
     });
 
     it('should return valid port and URL when office is initialized', async () => {
@@ -332,10 +357,51 @@ describe('CLI Interface & Auto-Onboarding', () => {
 
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      const result = await runCli(['start', projectDir, '--port', '4567']);
+      const result = (await runCli(['start', projectDir, '--port', '4567'])) as StartResult;
       expect(result).toBeDefined();
       expect(result.port).toBe(4567);
       expect(result.url).toBe('http://localhost:4567');
+    });
+
+    it('should handle --port=5000 syntax correctly', async () => {
+      const projectDir = path.join(testRoot, 'cli-start-eq-proj');
+      fs.mkdirSync(projectDir, { recursive: true });
+      runInit(projectDir);
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const result = (await runCli(['start', projectDir, '--port=5000'])) as StartResult;
+      expect(result).toBeDefined();
+      expect(result.port).toBe(5000);
+      expect(result.url).toBe('http://localhost:5000');
+    });
+
+    it('should throw error when port is non-numeric, out-of-range, or missing value', async () => {
+      const projectDir = path.join(testRoot, 'cli-port-err-proj');
+      fs.mkdirSync(projectDir, { recursive: true });
+      runInit(projectDir);
+
+      await expect(runCli(['start', projectDir, '--port', 'abc'])).rejects.toThrowError(/Invalid port/i);
+      await expect(runCli(['start', projectDir, '--port', '99999'])).rejects.toThrowError(/Invalid port/i);
+      await expect(runCli(['start', projectDir, '--port', '--open'])).rejects.toThrowError(/Missing port value/i);
+      await expect(runCli(['start', projectDir, '--port=invalid'])).rejects.toThrowError(/Invalid port/i);
+      await expect(runCli(['start', projectDir, '--port=70000'])).rejects.toThrowError(/Invalid port/i);
+    });
+
+    it('should show help and exit early when subcommand receives --help or -h without executing', async () => {
+      const projectDir = path.join(testRoot, 'cli-subhelp-proj');
+      fs.mkdirSync(projectDir, { recursive: true });
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await runCli(['init', projectDir, '--help']);
+      // Should not have initialized project
+      expect(fs.existsSync(path.join(projectDir, '.office'))).toBe(false);
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Usage: office'));
+
+      logSpy.mockClear();
+      await runCli(['start', projectDir, '-h']);
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Usage: office'));
     });
 
     it('should show help when requested with --help or -h', async () => {

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "2D Agent Office - Virtual Software Company Simulator",
   "type": "module",
+  "bin": {
+    "office": "./bin/office.ts"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

@@ -61,14 +61,14 @@ export function runInit(targetDir: string): InitResult {
     detectedStack.push('Go');
   }
 
-  // 4. Genesis Snapshot in baseline.json
+  // 4. Genesis Snapshot in baseline.json (machine-independent relative path)
   const baselinePath = path.join(officeDir, 'baseline.json');
   let baselineCreated = false;
   if (!fs.existsSync(baselinePath)) {
     const projectName = path.basename(resolvedTarget);
     const baselineData = {
       projectName,
-      targetDir: resolvedTarget,
+      targetDir: '.',
       detectedStack,
       timestamp: new Date().toISOString(),
       createdAt: new Date().toISOString()
@@ -77,10 +77,10 @@ export function runInit(targetDir: string): InitResult {
     baselineCreated = true;
   }
 
-  // 5. Gitignore management
+  // 5. Gitignore management (handles DB, SQLite WAL auxiliary files, and config.json)
   const gitignorePath = path.join(resolvedTarget, '.gitignore');
   if (!fs.existsSync(gitignorePath)) {
-    fs.writeFileSync(gitignorePath, '.office/office.db\n.office/config.json\n', 'utf-8');
+    fs.writeFileSync(gitignorePath, '.office/office.db*\n.office/config.json\n', 'utf-8');
   } else {
     const content = fs.readFileSync(gitignorePath, 'utf-8');
     const lines = content.split(/\r?\n/).map((l) => l.trim());
@@ -92,12 +92,27 @@ export function runInit(targetDir: string): InitResult {
 
     if (!hasEntireOfficeDir) {
       const toAdd: string[] = [];
-      if (!lines.includes('.office/office.db')) {
-        toAdd.push('.office/office.db');
+      const hasDbWildcard = lines.includes('.office/office.db*');
+      const hasDb = lines.includes('.office/office.db');
+
+      if (!hasDbWildcard) {
+        if (!hasDb) {
+          toAdd.push('.office/office.db*');
+        } else {
+          // If .office/office.db is already listed, ensure SQLite WAL and SHM files are also ignored
+          if (!lines.includes('.office/office.db-wal')) {
+            toAdd.push('.office/office.db-wal');
+          }
+          if (!lines.includes('.office/office.db-shm')) {
+            toAdd.push('.office/office.db-shm');
+          }
+        }
       }
+
       if (!lines.includes('.office/config.json')) {
         toAdd.push('.office/config.json');
       }
+
       if (toAdd.length > 0) {
         const needsLeadingNewline = content.length > 0 && !content.endsWith('\n');
         const appendContent = (needsLeadingNewline ? '\n' : '') + toAdd.join('\n') + '\n';
@@ -131,7 +146,20 @@ export async function runStart(
     );
   }
 
-  const port = options?.port ?? 3000;
+  let port = 3000;
+  if (options?.port !== undefined) {
+    if (
+      typeof options.port !== 'number' ||
+      isNaN(options.port) ||
+      !Number.isInteger(options.port) ||
+      options.port < 1 ||
+      options.port > 65535
+    ) {
+      throw new Error(`Invalid port: ${options.port}. Port must be an integer between 1 and 65535.`);
+    }
+    port = options.port;
+  }
+
   const url = `http://localhost:${port}`;
 
   console.log(`Starting 2D Agent Office dashboard at ${url}`);
@@ -146,10 +174,18 @@ export async function runStart(
 /**
  * CLI Entrypoint argument parser and executor.
  */
-export async function runCli(argv: string[] = process.argv.slice(2)): Promise<any> {
+export async function runCli(
+  argv: string[] = process.argv.slice(2)
+): Promise<InitResult | StartResult | void> {
   const command = argv[0];
 
-  if (!command || command === '--help' || command === '-h' || command === 'help') {
+  // If help flag is provided anywhere in argv or no command given, show help early
+  if (
+    !command ||
+    argv.includes('--help') ||
+    argv.includes('-h') ||
+    command === 'help'
+  ) {
     console.log(`
 Usage: office <command> [options]
 
@@ -195,10 +231,32 @@ Options:
     for (let i = 1; i < argv.length; i++) {
       const arg = argv[i];
       if (arg === '--port' || arg === '-p') {
-        const next = argv[++i];
-        if (next) port = parseInt(next, 10);
+        const next = argv[i + 1];
+        if (next && /^\d+$/.test(next)) {
+          const parsedPort = parseInt(next, 10);
+          if (parsedPort >= 1 && parsedPort <= 65535) {
+            port = parsedPort;
+            i++; // Safely consume next numeric argument
+          } else {
+            throw new Error(`Invalid port "${next}". Port must be between 1 and 65535.`);
+          }
+        } else if (next && !next.startsWith('-')) {
+          throw new Error(`Invalid port "${next}". Port must be an integer between 1 and 65535.`);
+        } else {
+          throw new Error(`Missing port value after "${arg}". Port must be an integer between 1 and 65535.`);
+        }
       } else if (arg.startsWith('--port=')) {
-        port = parseInt(arg.split('=')[1], 10);
+        const val = arg.split('=')[1];
+        if (/^\d+$/.test(val)) {
+          const parsedPort = parseInt(val, 10);
+          if (parsedPort >= 1 && parsedPort <= 65535) {
+            port = parsedPort;
+          } else {
+            throw new Error(`Invalid port "${val}". Port must be between 1 and 65535.`);
+          }
+        } else {
+          throw new Error(`Invalid port "${val}". Port must be an integer between 1 and 65535.`);
+        }
       } else if (arg === '--open' || arg === '--open-browser') {
         openBrowser = true;
       } else if (!arg.startsWith('-')) {
