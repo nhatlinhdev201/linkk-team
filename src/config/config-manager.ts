@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { OfficeConfig } from '../types/office.js';
+import { OfficeConfig, AgentRole } from '../types/office.js';
 
 export const DEFAULT_CONFIG: OfficeConfig = {
   proxyBaseUrl: 'http://localhost:8000/v1',
@@ -22,6 +22,10 @@ export const DEFAULT_CONFIG: OfficeConfig = {
   ignoredFolders: ['node_modules', 'dist', '.git', '.cache']
 };
 
+export type UpdateOfficeConfig = Partial<Omit<OfficeConfig, 'roleModels'>> & {
+  roleModels?: Partial<Record<AgentRole, string>>;
+};
+
 export class ConfigManager {
   private config: OfficeConfig;
   private filePath: string;
@@ -34,23 +38,46 @@ export class ConfigManager {
   private load(): OfficeConfig {
     if (!fs.existsSync(this.filePath)) {
       this.save(DEFAULT_CONFIG);
-      return { ...DEFAULT_CONFIG };
+      return structuredClone(DEFAULT_CONFIG);
     }
     try {
       const data = fs.readFileSync(this.filePath, 'utf-8');
-      return { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+      const parsed = JSON.parse(data);
+      return {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+        roleModels: {
+          ...DEFAULT_CONFIG.roleModels,
+          ...(parsed.roleModels || {})
+        }
+      };
     } catch {
-      return { ...DEFAULT_CONFIG };
+      return structuredClone(DEFAULT_CONFIG);
     }
   }
 
   public getConfig(): OfficeConfig {
-    return { ...this.config };
+    return structuredClone(this.config);
   }
 
-  public updateConfig(partial: Partial<OfficeConfig>): void {
-    this.config = { ...this.config, ...partial };
+  public updateConfig(partial: UpdateOfficeConfig): void {
+    this.config = {
+      ...this.config,
+      ...partial,
+      roleModels: {
+        ...this.config.roleModels,
+        ...(partial.roleModels || {})
+      }
+    };
     this.save(this.config);
+  }
+
+  public getProxyUrl(): string {
+    return this.config.proxyBaseUrl;
+  }
+
+  public getModelForRole(role: AgentRole): string {
+    return this.config.roleModels[role];
   }
 
   private save(config: OfficeConfig): void {

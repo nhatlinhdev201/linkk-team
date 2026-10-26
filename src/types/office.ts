@@ -17,3 +17,37 @@ export interface OfficeConfig {
   requireMergeApproval: boolean;
   ignoredFolders: string[];
 }
+
+export interface Epic {
+  id: string;
+  title: string;
+  description: string;
+  status: EpicStatus;
+  budgetCapUsd: number;
+  createdAt?: string;
+}
+
+export interface Task {
+  id: string;
+  epicId: string;
+  title: string;
+  status: TaskStatus;
+  assignedAgentId?: string;
+}
+
+export interface Agent {
+  id: string;
+  name?: string;
+  role: AgentRole;
+  state: AgentState;
+  currentTaskId?: string;
+}
+
+export interface ActivityEvent {
+  id?: string | number;
+  timestamp?: string;
+  epicId: string;
+  agentId: string;
+  eventType: string;
+  payload: any;
+}

@@ -41,4 +41,50 @@ describe('ConfigManager', () => {
     expect(config.proxyBaseUrl).toBe('http://localhost:8000/v1');
     expect(config.defaultBudgetCapUsd).toBe(5.0);
   });
+
+  it('should return a deep clone from getConfig preventing direct mutation', () => {
+    const manager = new ConfigManager(configPath);
+    const config = manager.getConfig();
+    config.proxyBaseUrl = 'http://mutated.com';
+    config.roleModels.QA = 'mutated-model';
+    config.ignoredFolders.push('new_folder');
+
+    const freshConfig = manager.getConfig();
+    expect(freshConfig.proxyBaseUrl).toBe('http://localhost:8000/v1');
+    expect(freshConfig.roleModels.QA).toBe('gpt-4o-mini');
+    expect(freshConfig.ignoredFolders).not.toContain('new_folder');
+  });
+
+  it('should preserve unspecified roles when updating roleModels partially', () => {
+    const manager = new ConfigManager(configPath);
+    manager.updateConfig({
+      roleModels: {
+        QA: 'custom-qa-model'
+      }
+    });
+
+    const updated = manager.getConfig();
+    expect(updated.roleModels.QA).toBe('custom-qa-model');
+    expect(updated.roleModels.ARCHITECT).toBe('claude-3-5-sonnet');
+    expect(updated.roleModels.FRONTEND).toBe('claude-3-5-sonnet');
+    expect(updated.roleModels.BACKEND).toBe('claude-3-5-sonnet');
+    expect(updated.roleModels.DEVOPS).toBe('claude-3-5-sonnet');
+  });
+
+  it('should return correct values via helper methods getProxyUrl and getModelForRole', () => {
+    const manager = new ConfigManager(configPath);
+    expect(manager.getProxyUrl()).toBe('http://localhost:8000/v1');
+    expect(manager.getModelForRole('ARCHITECT')).toBe('claude-3-5-sonnet');
+    expect(manager.getModelForRole('QA')).toBe('gpt-4o-mini');
+
+    manager.updateConfig({
+      proxyBaseUrl: 'http://custom-proxy/v1',
+      roleModels: {
+        ARCHITECT: 'custom-architect'
+      }
+    });
+
+    expect(manager.getProxyUrl()).toBe('http://custom-proxy/v1');
+    expect(manager.getModelForRole('ARCHITECT')).toBe('custom-architect');
+  });
 });
