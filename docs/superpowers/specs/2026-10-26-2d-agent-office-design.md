@@ -189,7 +189,31 @@ CREATE TABLE quota_usage (
 
 ---
 
-## 8. Lộ trình Triển khai (Next Steps)
+## 8. Trung tâm Cấu hình & Thiết lập (Office Settings Center)
+
+Hệ thống cung cấp một modal/drawer **Cấu hình trực quan (⚙️ Settings)** ngay trên thanh điều khiển Dashboard, đồng thời đồng bộ hai chiều với file `.office/config.json` (cục bộ repo) và `~/.office/global-config.json` (toàn cục máy cá nhân):
+
+### 8.1 Các nhóm thiết lập chính
+1. **LLM & Proxy Providers (Linh động kiểu pi.dev)**:
+   - *Proxy Base URL*: Nhập endpoint proxy tùy ý (`http://localhost:8000/v1`, LiteLLM, OpenRouter, hoặc Official APIs).
+   - *API Key Management*: Lưu trữ an toàn cục bộ (tự động đưa `.office/config.json` vào `.gitignore` để tránh lộ key).
+   - *Model Mapping theo Vai trò*: Tùy biến model cho từng vị trí (ví dụ: Architect dùng Claude 3.5 Sonnet / Opus, Coder dùng DeepSeek-V3 / Sonnet, QA dùng GPT-4o-mini / Flash để tiết kiệm).
+   - *Jev Endpoint*: Cấu hình endpoint cho mô hình quyết định nhanh Jev.
+2. **Game & Office Simulation (Trải nghiệm Thị giác & Âm thanh)**:
+   - *Sound FX & BGM*: Bật/tắt hoặc chỉnh âm lượng tiếng gõ phím cơ, tiếng bước chân, chuông họp khẩn, tiếng 'ding' khi hoàn thành ticket.
+   - *Tốc độ mô phỏng (Simulation Speed)*: 1x (thực tế), 1.5x (nhanh), 2x, hoặc "Teleport mode" (nhân viên nhảy cóc ngay vào vị trí không cần đợi đi bộ).
+   - *Giao diện & Theme*: Chọn phong cách văn phòng (Modern Startup, Retro Pixel 8-bit, Cyberpunk).
+3. **Governance, Safety & Quota Caps (An toàn & Ngân sách)**:
+   - *Mức ngân sách trần mặc định (Default Budget Cap)*: Ví dụ `$2.00` hoặc `500,000 tokens` cho mỗi Epic mới.
+   - *Ngưỡng cảnh báo tự động (Auto-Pause Threshold)*: Tự dừng khi đạt 80% hoặc 100% ngân sách.
+   - *Terminal Command Whitelist/Blacklist*: Chặn các lệnh nguy hiểm (`rm -rf`, `git push --force`, `drop database`).
+4. **Project Rules & Context Settings**:
+   - Định nghĩa quy tắc dự án chung (ví dụ: *"Luôn viết unit test trước"*, *"Dùng tiếng Việt trong tài liệu"*).
+   - Thư mục bỏ qua (Ignore list): `node_modules`, `dist`, `.cache`.
+
+---
+
+## 9. Lộ trình Triển khai (Next Steps)
 Sau khi tài liệu thiết kế này được phê duyệt:
 1. Chuyển sang kỹ năng **`writing-plans`** để lập Implementation Plan chi tiết theo từng task độc lập.
 2. Khởi tạo bộ khung dự án (Tauri / Vite + React + Phaser 3 + SQLite).
