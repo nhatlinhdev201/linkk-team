@@ -50,6 +50,17 @@ describe('JevGuard - Loop Breaker (checkLoop)', () => {
     expect(guard.checkLoop(history4, 4).isStuck).toBe(true);
   });
 
+  it('handles threshold <= 0 by returning isStuck false', () => {
+    const guard = new JevGuard();
+    const history: ToolHistoryEntry[] = [
+      { tool: 'edit_file', target: 'src/auth.ts', error: 'SyntaxError' },
+      { tool: 'edit_file', target: 'src/auth.ts', error: 'SyntaxError' },
+      { tool: 'edit_file', target: 'src/auth.ts', error: 'SyntaxError' },
+    ];
+    expect(guard.checkLoop(history, 0).isStuck).toBe(false);
+    expect(guard.checkLoop(history, -1).isStuck).toBe(false);
+  });
+
   it('handles tool history entries without a target', () => {
     const guard = new JevGuard();
     const history: ToolHistoryEntry[] = [
@@ -241,6 +252,33 @@ describe('JevGuard - Thought Summarizer (summarizeThought)', () => {
     const summary = guard.summarizeThought(thoughtWithTags);
     expect(summary).toBe('Đang phân tích cấu trúc...');
   });
+
+  it('summarizes database operations concisely in Vietnamese', () => {
+    const guard = new JevGuard();
+    const thought1 = 'Executing SQL queries to migrate table schemas and index records.';
+    expect(guard.summarizeThought(thought1)).toBe('Đang xử lý cơ sở dữ liệu...');
+
+    const thought2 = 'Updating database schema for user profiles and roles.';
+    expect(guard.summarizeThought(thought2)).toBe('Đang xử lý cơ sở dữ liệu...');
+  });
+
+  it('does not trigger false positives on embedded substrings like latest (test), explanation (plan), or credit (edit)', () => {
+    const guard = new JevGuard();
+    const thought1 = 'find the latest commit in git';
+    const summary1 = guard.summarizeThought(thought1);
+    expect(summary1).not.toBe('Đang chạy kiểm thử...');
+    expect(summary1.split(/\s+/).length).toBeLessThanOrEqual(8);
+
+    const thought2 = 'give me an explanation of this concept';
+    const summary2 = guard.summarizeThought(thought2);
+    expect(summary2).not.toBe('Đang lập kế hoạch...');
+    expect(summary2.split(/\s+/).length).toBeLessThanOrEqual(8);
+
+    const thought3 = 'verify user credit balance for transaction';
+    const summary3 = guard.summarizeThought(thought3);
+    expect(summary3).not.toBe('Đang viết mã nguồn...');
+    expect(summary3.split(/\s+/).length).toBeLessThanOrEqual(8);
+  });
 });
 
 describe('JevGuard - Squad Recommender (recommendSquad)', () => {
@@ -289,6 +327,16 @@ describe('JevGuard - Squad Recommender (recommendSquad)', () => {
       expect(squad).not.toContain('FRONTEND');
       expect(squad).not.toContain('DEVOPS');
     }
+  });
+
+  it('recommends BACKEND when sql is mentioned without other backend keywords', () => {
+    const guard = new JevGuard();
+    const squad = guard.recommendSquad('Write complex SQL scripts for financial reporting');
+    expect(squad).toContain('ARCHITECT');
+    expect(squad).toContain('BACKEND');
+    expect(squad).toContain('QA');
+    expect(squad).not.toContain('FRONTEND');
+    expect(squad).not.toContain('DEVOPS');
   });
 
   it('recommends DEVOPS when docker/ci/cd/deploy/kubernetes/pipeline is mentioned', () => {

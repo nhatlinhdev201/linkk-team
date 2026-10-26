@@ -40,8 +40,6 @@ export class JevGuard {
 
     const isRepeated = recent.every(
       (entry) =>
-        entry.error !== undefined &&
-        entry.error !== '' &&
         entry.error === first.error &&
         entry.tool === first.tool &&
         entry.target === first.target
@@ -86,37 +84,37 @@ export class JevGuard {
     const lower = cleaned.toLowerCase();
 
     // Priority 1: AST Analysis & Review
-    if (/(analyz|analysis|\bast\b|inspect|review|phân tích)/i.test(lower)) {
+    if (/\b(analyz\w*|analysis|ast|inspect\w*|review\w*|phân tích)\b/i.test(lower)) {
       return 'Đang phân tích cấu trúc...';
     }
 
     // Priority 2: Testing & Verification
-    if (/(test|vitest|jest|pytest|testing|kiểm thử)/i.test(lower)) {
+    if (/\b(tests?|testing|vitest|jest|pytest|kiểm thử)\b/i.test(lower)) {
       return 'Đang chạy kiểm thử...';
     }
 
     // Priority 3: Planning & System Architecture
-    if (/(plan|architect|roadmap|design|kế hoạch)/i.test(lower)) {
+    if (/\b(plans?|planning|architect\w*|roadmap|designs?|kế hoạch)\b/i.test(lower)) {
       return 'Đang lập kế hoạch...';
     }
 
     // Priority 4: Deployment & DevOps Infrastructure
-    if (/(deploy|docker|ci\/cd|ci-cd|kubernetes|k8s|triển khai)/i.test(lower)) {
+    if (/\b(deploys?|deploying|deployment|docker|ci\/cd|ci-cd|\bci\b|\bcd\b|kubernetes|k8s|triển khai)\b/i.test(lower)) {
       return 'Đang triển khai môi trường...';
     }
 
     // Priority 5: Debugging & Fixing Errors
-    if (/(debug|error|bug|issue|gỡ lỗi)/i.test(lower)) {
+    if (/\b(debug\w*|errors?|bugs?|issues?|fix\w*|gỡ lỗi)\b/i.test(lower)) {
       return 'Đang gỡ lỗi sự cố...';
     }
 
     // Priority 6: Code Writing & Editing
-    if (/(edit|writing|code|implement|coding|viết mã)/i.test(lower)) {
+    if (/\b(edits?|editing|writing|code|coding|implement\w*|viết mã)\b/i.test(lower)) {
       return 'Đang viết mã nguồn...';
     }
 
     // Priority 7: Database Operations
-    if (/(database|schema|query|csdl)/i.test(lower)) {
+    if (/\b(databases?|schemas?|query|queries|sql|csdl)\b/i.test(lower)) {
       return 'Đang xử lý cơ sở dữ liệu...';
     }
 
@@ -150,7 +148,7 @@ export class JevGuard {
     }
 
     const hasBackend =
-      /\b(api|apis|db|dbs|backend|back-end|auth|authentication|authorization|database|databases|server|servers)\b/i.test(
+      /\b(api|apis|db|dbs|sql|backend|back-end|auth|authentication|authorization|database|databases|server|servers)\b/i.test(
         epicDescription
       );
     if (hasBackend) {
