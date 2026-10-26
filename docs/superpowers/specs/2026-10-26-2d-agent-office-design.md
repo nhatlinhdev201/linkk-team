@@ -25,6 +25,21 @@ Trong thế giới này:
 4. **Kiểm soát linh hoạt (Dynamic Squad & Human-in-the-loop)**: Giám đốc có quyền tuyển thêm hoặc cho nghỉ agent ngay giữa chừng để tối ưu hiệu suất, triệu tập họp khẩn (War Room), và chặn xét duyệt các checkpoint rủi ro.
 5. **Tối ưu chi phí & Quota (Jev Fast Guard)**: Sử dụng Jev decision model làm bộ lọc nhanh (<10ms) để bắt lỗi kẹt vòng lặp vô tận và tóm tắt hội thoại, tránh lãng phí token frontier LLM.
 
+### 1.3 Cơ chế Tự động Nhận diện Scope & Tiến hóa Ngữ cảnh (Living Project Context)
+* **Auto-binding Project Scope**: Khi chạy `office init` tại bất kỳ thư mục nào, đường dẫn hiện tại (`process.cwd()`) tự động trở thành **Root Scope** độc quyền của văn phòng đó. Mọi thao tác file, bash command, git commit đều bị cô lập chặt chẽ bên trong phạm vi thư mục này, đảm bảo tính an toàn.
+* **Codebase Onboarding Scanner (Lúc init)**:
+  - Tự động nhận diện Tech Stack (`package.json`, `Cargo.toml`, `requirements.txt`, `go.mod`).
+  - Đọc `README.md`, tài liệu kiến trúc, linter config, và test framework hiện có.
+  - Chụp ảnh mốc số 0 (Genesis Baseline): Lưu commit hash, branch hiện tại, cây thư mục chính.
+* **Tiến hóa Ngữ cảnh theo Tiến độ (Living Knowledge Base)**:
+  - Context không phải là một tệp tĩnh; nó tiến hóa theo từng task:
+    - Khi Epic 1 hoàn thành $\rightarrow$ Hệ thống tự tổng hợp tóm tắt: *"Đã xây dựng module Auth bằng JWT tại `src/auth/`, quy ước viết test tại `tests/auth.test.ts`"*.
+    - Khi bắt đầu Epic 2 $\rightarrow$ Squad mới tự động thừa hưởng toàn bộ tri thức từ Epic 1 mà không phải quét lại toàn bộ code.
+  - Đội ngũ Agent luôn trả lời được chính xác 3 câu hỏi:
+    1. *Dự án lúc mới `init` có cấu trúc gì?*
+    2. *Team đã hoàn thành những gì qua các Epic trước?*
+    3. *Hiện tại ticket nào đang chạy, những gì còn tồn đọng trong backlog?*
+
 ---
 
 ## 2. Kiến trúc Hệ thống Phân tầng (4-Layer Clean Architecture)
