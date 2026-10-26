@@ -27,6 +27,14 @@ describe('SquadManager', () => {
       expect(manager.getAgent('agent-fe-1')).toBe(agent);
     });
 
+    it('throws descriptive error when attempting to hire an agent with duplicate id', () => {
+      const manager = new SquadManager(bus);
+      manager.hireAgent('agent-fe-1', 'FRONTEND');
+      expect(() => {
+        manager.hireAgent('agent-fe-1', 'BACKEND');
+      }).toThrow("Agent with id 'agent-fe-1' already exists in active squad");
+    });
+
     it('hires an agent with a custom initial state', () => {
       const manager = new SquadManager(bus);
 

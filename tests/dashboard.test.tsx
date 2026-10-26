@@ -593,6 +593,32 @@ describe('Dashboard Component Suite', () => {
       expect(screen.queryByTestId('settings-modal')).toBeNull();
     });
 
+    it('should invoke configManager.updateConfig when settings are saved', () => {
+      const mockConfigManager = {
+        getConfig: vi.fn(() => structuredClone(DEFAULT_CONFIG)),
+        updateConfig: vi.fn(),
+      };
+      render(
+        React.createElement(Dashboard, {
+          bus,
+          configManager: mockConfigManager,
+        })
+      );
+
+      const settingsBtn = screen.getByTestId('btn-open-settings');
+      fireEvent.click(settingsBtn);
+
+      const proxyInput = screen.getByTestId('input-proxy-url') as HTMLInputElement;
+      fireEvent.change(proxyInput, { target: { value: 'http://custom-host:9999/v1' } });
+
+      const saveBtn = screen.getByTestId('btn-save-settings');
+      fireEvent.click(saveBtn);
+
+      expect(mockConfigManager.updateConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ proxyBaseUrl: 'http://custom-host:9999/v1' })
+      );
+    });
+
     it('should move task in KanbanBoard, trigger callback, and emit TICKET_MOVED on bus', () => {
       const onMoveTask = vi.fn();
       const ticketMovedSpy = vi.fn();

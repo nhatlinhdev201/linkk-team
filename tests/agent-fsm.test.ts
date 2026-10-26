@@ -150,6 +150,26 @@ describe('OfficeEventBus', () => {
     bus.emit('BUBBLE_SPEECH', { agentId: 'agent-1', text: 'Second' });
     expect(order).toEqual([1, 3]);
   });
+
+  it('isolates listener errors so failing listener does not prevent subsequent listeners from executing', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failingCallback = vi.fn(() => {
+      throw new Error('Listener failed unexpectedly');
+    });
+    const succeedingCallback = vi.fn();
+
+    bus.subscribe('BUBBLE_SPEECH', failingCallback);
+    bus.subscribe('BUBBLE_SPEECH', succeedingCallback);
+
+    expect(() => {
+      bus.emit('BUBBLE_SPEECH', { agentId: 'agent-1', text: 'Resilience test' });
+    }).not.toThrow();
+
+    expect(failingCallback).toHaveBeenCalledTimes(1);
+    expect(succeedingCallback).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
 });
 
 describe('AgentStateMachine', () => {

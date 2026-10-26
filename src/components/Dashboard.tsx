@@ -2,17 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { OfficeConfig, Task, TaskStatus } from '../types/office.js';
 import { OfficeEventBus } from '../events/event-bus.js';
 import { SquadManager } from '../orchestration/squad-manager.js';
-import { ConfigManager, DEFAULT_CONFIG, UpdateOfficeConfig } from '../config/config-manager.js';
+import { DEFAULT_CONFIG } from '../config/defaults.js';
 import { OfficeCanvas } from '../canvas/office-canvas.js';
 import { DirectorBar } from './DirectorBar.js';
 import { KanbanBoard } from './KanbanBoard.js';
 import { ThoughtInspector } from './ThoughtInspector.js';
 import { SettingsModal } from './SettingsModal.js';
 
+export interface IConfigManager {
+  getConfig(): OfficeConfig;
+  updateConfig(partial: Partial<OfficeConfig>): void;
+}
+
 export interface DashboardProps {
   bus: OfficeEventBus;
   squadManager?: SquadManager;
-  configManager?: ConfigManager;
+  configManager?: IConfigManager;
   tasks?: Task[];
   onMoveTask?: (taskId: string, newStatus: TaskStatus) => void;
   className?: string;
@@ -68,7 +73,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const handleMoveTask = (taskId: string, newStatus: TaskStatus) => {
     const targetTask = tasks.find((t) => t.id === taskId);
-    const fromStatus = targetTask ? targetTask.status : '';
+    const fromStatus: TaskStatus = targetTask ? targetTask.status : 'BACKLOG';
 
     bus.emit('TICKET_MOVED', {
       taskId,
@@ -96,7 +101,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setConfig(updated);
 
     if (configManager) {
-      configManager.updateConfig(newCfg as UpdateOfficeConfig);
+      configManager.updateConfig(newCfg);
     }
   };
 

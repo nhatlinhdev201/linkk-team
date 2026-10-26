@@ -43,6 +43,9 @@ export class SquadManager {
     role: AgentRole,
     initialState: AgentState = 'IDLE'
   ): AgentStateMachine {
+    if (this.squad.has(id)) {
+      throw new Error(`Agent with id '${id}' already exists in active squad`);
+    }
     const agent = new AgentStateMachine(id, role, this.bus, initialState);
     this.squad.set(id, agent);
 

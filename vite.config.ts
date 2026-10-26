@@ -1,3 +1,14 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig({});
+export default defineConfig({
+  build: {
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          phaser: ['phaser']
+        }
+      }
+    }
+  }
+});

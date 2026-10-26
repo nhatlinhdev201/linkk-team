@@ -83,7 +83,7 @@ export class OfficeStorage {
     };
   }
 
-  public updateEpicStatus(id: string, status: string): void {
+  public updateEpicStatus(id: string, status: EpicStatus): void {
     const stmt = this.db.prepare(
       'UPDATE epics SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     );
@@ -116,7 +116,7 @@ export class OfficeStorage {
     };
   }
 
-  public moveTask(taskId: string, newStatus: string): void {
+  public moveTask(taskId: string, newStatus: TaskStatus): void {
     const isDone = newStatus === 'DONE';
     const stmt = this.db.prepare(
       'UPDATE tasks SET status = ?, completed_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id = ?'

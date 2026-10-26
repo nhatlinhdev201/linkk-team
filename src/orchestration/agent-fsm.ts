@@ -1,7 +1,7 @@
 import { AgentRole, AgentState } from '../types/office.js';
 import { OfficeEventBus, AgentStateChangedPayload } from '../events/event-bus.js';
 
-export const VALID_TRANSITIONS: Record<AgentState, AgentState[]> = {
+export const VALID_TRANSITIONS: Readonly<Record<AgentState, readonly AgentState[]>> = {
   IDLE: ['WALKING', 'THINKING', 'TALKING'],
   WALKING: ['THINKING', 'CODING', 'REVIEWING', 'IDLE', 'TALKING'],
   THINKING: ['CODING', 'TALKING', 'REVIEWING', 'IDLE', 'WALKING'],

@@ -1,4 +1,4 @@
-import { AgentRole, AgentState } from '../types/office.js';
+import { AgentRole, AgentState, TaskStatus } from '../types/office.js';
 
 export interface AgentStateChangedPayload {
   agentId: string;
@@ -13,8 +13,8 @@ export interface AgentStateChangedPayload {
 export interface TicketMovedPayload {
   taskId: string;
   epicId: string;
-  fromStatus: string;
-  toStatus: string;
+  fromStatus: TaskStatus;
+  toStatus: TaskStatus;
   agentId?: string;
 }
 
@@ -87,7 +87,11 @@ export class OfficeEventBus {
     if (eventListeners && eventListeners.size > 0) {
       const copy = Array.from(eventListeners);
       for (const listener of copy) {
-        listener(payload);
+        try {
+          listener(payload);
+        } catch (err) {
+          console.error(`Error in listener for event '${event}':`, err);
+        }
       }
     }
   }
