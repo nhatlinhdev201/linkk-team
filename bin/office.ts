@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ConfigManager } from '../src/config/config-manager.js';
 import { OfficeStorage } from '../src/storage/office-storage.js';
+import { startDashboardServer } from '../src/server/dashboard-server.js';
 
 export const CLI_VERSION = '0.1.0';
 
@@ -22,6 +23,8 @@ export interface StartOptions {
 export interface StartResult {
   port: number;
   url: string;
+  server?: any;
+  close?: () => Promise<void>;
 }
 
 /**
@@ -160,7 +163,14 @@ export async function runStart(
     port = options.port;
   }
 
-  const url = `http://localhost:${port}`;
+  const isDirect = isDirectExecution();
+  const serverInstance = await startDashboardServer(resolvedTarget, {
+    port,
+    openBrowser: options?.openBrowser,
+    unref: !isDirect
+  });
+
+  const url = serverInstance.url;
 
   console.log(`Starting 2D Agent Office dashboard at ${url}`);
 
@@ -168,7 +178,16 @@ export async function runStart(
     console.log(`Opening browser at ${url}...`);
   }
 
-  return { port, url };
+  if (isDirect) {
+    console.log('Serving 2D Agent Office dashboard. Press Ctrl+C to stop.');
+  }
+
+  return {
+    port: serverInstance.port,
+    url,
+    server: serverInstance.server,
+    close: serverInstance.close
+  };
 }
 
 /**

@@ -333,6 +333,20 @@ describe('CLI Interface & Auto-Onboarding', () => {
       expect(serverInfo.port).toBe(3000);
       expect(serverInfo.url).toBe('http://localhost:3000');
     });
+
+    it('should serve HTML dashboard on HTTP GET request', async () => {
+      const projectDir = path.join(testRoot, 'http-serve-proj');
+      fs.mkdirSync(projectDir, { recursive: true });
+      runInit(projectDir);
+
+      const serverInfo = await runStart(projectDir, { port: 3456 });
+      const res = await fetch(serverInfo.url);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+      const text = await res.text();
+      expect(text).toContain('<!DOCTYPE html>');
+      if (serverInfo.close) await serverInfo.close();
+    });
   });
 
   describe('CLI Entrypoint (runCli)', () => {
